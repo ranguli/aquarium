@@ -1,24 +1,17 @@
 import hashlib
 import os
 from datetime import datetime
+import tempfile
+from urllib.parse import urlparse
 
 from source import Source
 from sample import Sample
 from base import Session, engine, Base
 
-import tempfile
-
 from minio import Minio, error
-
-from urllib.parse import urlparse
-
 import requests
 from pathvalidate import sanitize_filename
 from hurry.filesize import size
-
-minio_client = Minio(
-    "127.0.0.1:9001", access_key="minio", secret_key="minio123", secure=False
-)
 
 filesize_limit = 10000000  # 10MB per sample. If the malware is bigger than that, they should write smaller malware.
 
@@ -27,6 +20,10 @@ urlhaus_dump_url = "https://urlhaus.abuse.ch/downloads/csv_online/"
 
 Base.metadata.create_all(engine)
 session = Session()
+
+minio_client = Minio(
+    "127.0.0.1:9001", access_key="minio", secret_key="minio123", secure=False
+)
 
 dump_exists = os.path.isfile(urlhaus_dump)
 
@@ -62,7 +59,7 @@ def process_sample(row):
                             0
                         ]
                     except:
-                        print("No content type specified, ditching")
+                        print("No content type specified. Can't guarantee this is a file we're interested in.")
                         return
 
                     content_length = response.headers.get("Content-Length")
@@ -74,7 +71,7 @@ def process_sample(row):
                     if (
                         content_type != "text/html"
                         and content_length
-                        and int(content_length) <= filesize_limit
+                        and int(content_length) <= filesize_limit # Don't accidentally download gigantic files
                     ):
 
                         headers = {
@@ -82,6 +79,7 @@ def process_sample(row):
                         }
 
                         try:
+                            # Being explicit about the timeouts is important, otherwise you'll basically tarpit yourself.
                             malware_request = requests.get(
                                 url, headers=headers, timeout=(30, 30)
                             )

@@ -25,7 +25,7 @@ Besides being an interesting and novel project, running my own instance of aquar
 ## Demo
 
 This is the end result of downloading samples. The actual files themselves are stored in a MinIO store:
-![](screenshot/screenshot_minio.png)
+![](screenshots/screenshot_minio.png)
 
 For cataloging purposes, information about the samples are kept in an SQL database under a `samples` table, and a second table, `sources`, stores information about where the sample was found. 
 
@@ -36,10 +36,10 @@ This allows for a few interesting possibilities:
 
 
 **Samples**
-![](screenshot/screenshot_samples.png)
+![](screenshots/screenshot_samples.png)
 
 **Sources**
-![](screenshot/screenshot_sources.png)
+![](screenshots/screenshot_sources.png)
 
 ## Development
 

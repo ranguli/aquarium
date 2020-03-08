@@ -5,9 +5,8 @@ from base import Base
 
 
 class Sample(Base):
-    __tablename__ = "samples"
+    __tablename__ = "sample"
 
-    id = Column(Integer, autoincrement=True)
     sha256 = Column(String, primary_key=True)
     md5 = Column(String)
     filename = Column(String)

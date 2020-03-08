@@ -1,11 +1,9 @@
-# coding=utf-8
-
 from sqlalchemy import Column, String, Integer, PrimaryKeyConstraint
 from base import Base
 
 
 class Source(Base):
-    __tablename__ = "sources"
+    __tablename__ = "source"
 
     id = Column(Integer, autoincrement=True, primary_key=True)
     sha256 = Column(String)

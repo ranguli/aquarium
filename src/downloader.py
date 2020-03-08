@@ -22,7 +22,7 @@ Base.metadata.create_all(engine)
 session = Session()
 
 minio_client = Minio(
-    "127.0.0.1:9001", access_key="minio", secret_key="minio123", secure=False
+    "127.0.0.1:9000", access_key="minio", secret_key="minio123", secure=False
 )
 
 dump_exists = os.path.isfile(urlhaus_dump)
@@ -33,109 +33,102 @@ down = set()
 
 def process_sample(row):
 
-    if not row.startswith("#") and row:
-        url = row.split(",")[2]
-        if url.startswith('"') and url.endswith('"'):
-            url = url[1:-1]
-            domain = urlparse(url).netloc
+    if not (not row.startswith("#") and row):
+        return
 
-            if url not in seen and domain not in down:
+    url = row.split(",")[2]
 
-                seen.add(url)
+    if not (url.startswith('"') and url.endswith('"')):
+        return
 
-                try:
-                    response = requests.head(url, allow_redirects=False, timeout=2)
-                except (
-                    requests.exceptions.ConnectionError,
-                    requests.exceptions.ConnectTimeout,
-                    requests.exceptions.ReadTimeout,
-                ):
-                    down.add(domain)
-                    return
+    url = url[1:-1]
+    domain = urlparse(url).netloc
 
-                if response.status_code == requests.codes.ok:
-                    try:
-                        content_type = response.headers.get("Content-Type").split(";")[
-                            0
-                        ]
-                    except:
-                        print("No content type specified. Can't guarantee this is a file we're interested in.")
-                        return
+    if not (url not in seen and domain not in down):
+        return
 
-                    content_length = response.headers.get("Content-Length")
+    seen.add(url)
 
-                    filename = url.split("/")[-1]
-                    if not filename:
-                        filename = sanitize_filename(url)
+    try:
+        response = requests.head(url, allow_redirects=False, timeout=2)
+    except (
+        requests.exceptions.ConnectionError,
+        requests.exceptions.ConnectTimeout,
+        requests.exceptions.ReadTimeout,
+    ):
+        down.add(domain)
+        return
 
-                    if (
-                        content_type != "text/html"
-                        and content_length
-                        and int(content_length) <= filesize_limit # Don't accidentally download gigantic files
-                    ):
+    if not (response.status_code == requests.codes.ok):
+        return
 
-                        headers = {
-                            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:68.0) Gecko/20100101 Firefox/68.0"
-                        }
+    try:
+        content_type = response.headers.get("Content-Type").split(";")[0]
+    except:
+        print(
+            "No content type specified. Can't guarantee this is a file we're interested in."
+        )
+        return
 
-                        try:
-                            # Being explicit about the timeouts is important, otherwise you'll basically tarpit yourself.
-                            malware_request = requests.get(
-                                url, headers=headers, timeout=(30, 30)
-                            )
-                        except (
-                            requests.exceptions.ConnectionError,
-                            requests.exceptions.ConnectTimeout,
-                            requests.exceptions.ReadTimeout,
-                        ):
-                            down.add(domain)
-                            return
+    content_length = response.headers.get("Content-Length")
 
-                        print(
-                            "Downloading {filename} from {url} content type of {content_type}, file size of {content_length}".format(
-                                filename=filename,
-                                url=url,
-                                content_type=content_type,
-                                content_length=size(int(content_length)),
-                            )
-                        )
+    filename = url.split("/")[-1]
+    if not filename:
+        filename = sanitize_filename(url)
 
-                        fp = tempfile.NamedTemporaryFile()
-                        fp.write(bytes(malware_request.content))
+    if not (
+        content_type != "text/html"
+        and content_length
+        and int(content_length)
+        <= filesize_limit  # Don't accidentally download gigantic files
+    ):
+        return
 
-                        fp.seek(0)
-                        sha256hash = hashlib.sha256(fp.read()).hexdigest()
-                        fp.seek(0)
-                        md5hash = hashlib.md5(fp.read()).hexdigest()
+    headers = {
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:68.0) Gecko/20100101 Firefox/68.0"
+    }
 
-                        print(
-                            "Got SHA256 hash of {sha256hash}".format(
-                                sha256hash=sha256hash
-                            )
-                        )
-                        print("Got MD5 hash of {md5hash}".format(md5hash=md5hash))
+    try:
+        # Being explicit about the timeouts is important, otherwise you'll basically tarpit yourself.
+        malware_request = requests.get(url, headers=headers, timeout=(30, 30))
+    except (
+        requests.exceptions.ConnectionError,
+        requests.exceptions.ConnectTimeout,
+        requests.exceptions.ReadTimeout,
+    ):
+        down.add(domain)
+        return
 
-                        if sha256hash not in [
-                            item.object_name
-                            for item in minio_client.list_objects("samples")
-                        ]:
-                            print("Uploading sample to MinIO store")
-                            minio_client.fput_object("samples", sha256hash, fp.name)
-                            session.add(
-                                Sample(sha256hash, md5hash, filename, content_type)
-                            )
-                        else:
-                            print("Sample with that hash already in MinIO store")
+    print(
+        f"Downloading {filename} from {url} content type of {content_type}, file size of {size(int(content_length))}"
+    )
 
-                        fp.close()
+    fp = tempfile.NamedTemporaryFile()
+    fp.write(bytes(malware_request.content))
 
-                        source = Source(sha256hash, url, datetime.now())
+    fp.seek(0)
+    sha256hash = hashlib.sha256(fp.read()).hexdigest()
+    fp.seek(0)
+    md5hash = hashlib.md5(fp.read()).hexdigest()
 
-                        session.add(source)
-                        session.commit()
+    print(f"Got SHA256 hash of {sha256hash}")
+    print(f"Got MD5 hash of {md5hash}")
 
-                    else:
-                        return
+    if sha256hash not in [
+        item.object_name for item in minio_client.list_objects("samples")
+    ]:
+        print("Uploading sample to MinIO store")
+        minio_client.fput_object("samples", sha256hash, fp.name)
+        session.add(Sample(sha256hash, md5hash, filename, content_type))
+    else:
+        print("Sample with that hash already in MinIO store")
+
+    fp.close()
+
+    source = Source(sha256hash, url, datetime.now())
+
+    session.add(source)
+    session.commit()
 
 
 def main():
@@ -149,9 +142,7 @@ def main():
 
     elif not dump_exists or filestat.st_size == 0 or lapsed.total_seconds > 3600:
         print(
-            "{dumpfile} does not exist, is invalid, or is stale. Re-downloading from {url}".format(
-                dumpfile=urlhaus_dump, url=urlhaus_dump_url
-            )
+            f"{urlhaus_dump} does not exist, is invalid, or is stale. Re-downloading from {urlhaus_dump_url}"
         )
         r = requests.get(urlhaus_dump_url)
         with open(urlhaus_dump, "w") as f:

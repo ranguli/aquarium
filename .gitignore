@@ -1,6 +1,7 @@
-*.csv
-__pycache__/
 *.sqlite
 *.db
-data/
+*.csv
 *.swp
+__pycache__/
+venv/
+data/

@@ -1,12 +1,12 @@
 FROM python:3.7-alpine3.11
 
-VOLUME /urlhaus_db
+VOLUME /aquarium
 
-ADD ./src /urlhaus_db/
-ADD ./requirements.txt /urlhaus_db/
+ADD ./src /aquarium/
+ADD ./requirements.txt /aquarium/
 
-WORKDIR /urlhaus_db
+WORKDIR /aquarium
 
 RUN pip install -r requirements.txt
 
-CMD ["python", "downloader.py"]
+CMD ["python", "-u", "downloader.py"]

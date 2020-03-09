@@ -7,6 +7,9 @@ ADD ./requirements.txt /aquarium/
 
 WORKDIR /aquarium
 
-RUN pip install -r requirements.txt
+RUN apk add build-base \
+  	    gcc \
+	    postgresql-dev && \
+    pip install -r requirements.txt
 
-CMD ["python", "-u", "downloader.py"]
+CMD ["python", "-u", "worker.py"]

@@ -19,7 +19,7 @@ Besides being an interesting and novel project, running my own instance of aquar
     - [ ] ClamAV signature database by scanning samples and generating signatures for samples which aren't detected.
   - [ ] Perform dynamic and network analysis
     - [ ] Achievable by running a Cuckoo sandbox and utilizing its REST/Python API
-- [ ] To support a worker system, it is necessary to migrate to a database that better supports concurrent reading/writing.
+- [x] To support a worker system, it is necessary to migrate to a database that better supports concurrent reading/writing.
 - [ ] Create a simple REST API to query your malware museum that returns collected metadata about a sample (and optionally the sample itself)
 
 ## Demo
@@ -47,4 +47,12 @@ When updating the dependencies for the Dockerfile, run:
 
 ```bash
 poetry run pip freeze > requirements.txt
+```
+
+If you run into a siutation where Docker doesn't seem to be 'stuck' and not running the latest version of the project (whether it be old code, old configs, etc), consider:
+
+```
+docker system prune --volumes # Assuming you have no other currently unused volumes
+rm -rf data/
+docker-compose up --build
 ```

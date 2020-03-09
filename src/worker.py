@@ -20,9 +20,6 @@ filesize_limit = 10000000  # 10MB per sample. If the malware is bigger than that
 urlhaus_dump = "urlhaus_online.csv"
 urlhaus_dump_url = "https://urlhaus.abuse.ch/downloads/csv_online/"
 
-Base.metadata.create_all(engine)
-session = Session()
-
 dump_exists = os.path.isfile(urlhaus_dump)
 
 seen = set()
@@ -32,11 +29,12 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 handler = logging.StreamHandler(sys.stdout)
-formatter = logging.Formatter("%(asctime)s - %(message)s") 
+formatter = logging.Formatter("%(asctime)s - %(message)s")
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-def process_sample(minio_client, row):
+
+def process_sample(minio_client, session, row):
 
     if not (not row.startswith("#") and row):
         return
@@ -52,7 +50,9 @@ def process_sample(minio_client, row):
     exists = session.query(Source).filter_by(url=url).first()
 
     if url in seen or domain in down or exists:
-        logging.info(f"Skipping over {url} because we've already processed it or we know its offline")
+        logging.info(
+            f"Skipping over {url} because we've already processed it or we know its offline"
+        )
         return
 
     seen.add(url)
@@ -77,7 +77,9 @@ def process_sample(minio_client, row):
     try:
         content_type = response.headers.get("Content-Type").split(";")[0]
     except AttributeError:
-        logging.info("No content type specified. Can't guarantee this is a file we're interested in.")
+        logging.info(
+            "No content type specified. Can't guarantee this is a file we're interested in."
+        )
         return
 
     content_length = response.headers.get("Content-Length")
@@ -99,7 +101,7 @@ def process_sample(minio_client, row):
     }
 
     try:
-        # Being explicit about the timeouts is important, otherwise you'll basically tarpit yourself.
+        # Being explicit about the timeouts is important, some connections will basically tarpit you.
         logging.info(f"Downloading sample at {url}")
         malware_request = requests.get(url, headers=headers, timeout=(30, 30))
     except (
@@ -145,9 +147,31 @@ def process_sample(minio_client, row):
 
 
 def main():
-    logging.info("Connecting to MinIO") 
+
+    MINIO_ACCESS_KEY = None
+    MINIO_SECRET_KEY = None
+
+    with open(os.getenv("MINIO_ACCESS_KEY"), "r") as f:
+        MINIO_ACCESS_KEY = f.read().strip("\n")
+
+    with open(os.getenv("MINIO_SECRET_KEY"), "r") as f:
+        MINIO_SECRET_KEY = f.read().strip("\n")
+
+    try:
+        logging.info("Connecting to database...")
+        Base.metadata.create_all(engine)
+        session = Session()
+        logging.info("Connected to database successfully.")
+    except:
+        logging.info(f"Couldn't connect to database.")
+        sys.exit(1)
+
+    logging.info("Connecting to MinIO")
     minio_client = Minio(
-        "minio:9000", access_key="minio", secret_key="minio123", secure=False
+        f"minio:9000",
+        access_key=MINIO_ACCESS_KEY,
+        secret_key=MINIO_SECRET_KEY,
+        secure=False,
     )
 
     if dump_exists:
@@ -174,7 +198,7 @@ def main():
         dump = f.read().split("\n")
 
         for row in dump:
-            process_sample(minio_client, row)
+            process_sample(minio_client, session, row)
 
 
 if __name__ == "__main__":

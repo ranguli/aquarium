@@ -8,20 +8,50 @@ services:
       - "9000:9000"
     volumes:
       - "./data:/data"
-    networks: 
-      - backend
+    # minio doesn't seem to support docker-compose secrets :/ fix later 
     environment:
-      MINIO_ACCESS_KEY: minio # You are expected to change this
-      MINIO_SECRET_KEY: minio123 # You are expected to change this
+      MINIO_ACCESS_KEY: minio
+      MINIO_SECRET_KEY: minio123
     command: server /data/minio 
+  db:
+    container_name: db
+    image: postgres:latest
+    restart: always
+    expose:
+      - 5432
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_pass
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    secrets:
+      - db_pass
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8080:8080
   worker:
     container_name: worker
-    depends_on:
-      - minio
-    networks:
-    - backend
     build: "."
-
-networks:
-  backend:
-    driver: "bridge"
+    depends_on:
+    - db
+    - minio
+    environment:
+      MINIO_ACCESS_KEY: /run/secrets/minio_access_key
+      MINIO_SECRET_KEY: /run/secrets/minio_secret_key
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_pass
+    secrets:
+      - db_pass
+      - minio_access_key
+      - minio_secret_key
+secrets:
+  db_pass:
+    file: secrets/db_pass
+  minio_access_key:
+    file: secrets/minio_access_key
+  minio_secret_key:
+    file: secrets/minio_secret_key
